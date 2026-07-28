@@ -30,6 +30,7 @@ playwright/.cache/
 
 # Crawling output (optional)
 *.json
+*.txt
 
 # MongoDB data
 mongo_data/
