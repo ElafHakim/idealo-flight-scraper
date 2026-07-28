@@ -22,7 +22,6 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
-
 # Scrapy
 .scrapy/
 
