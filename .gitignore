@@ -29,7 +29,6 @@ dist/
 playwright/.cache/
 
 # Crawling output (optional)
-*.csv
 *.json
 
 # MongoDB data
