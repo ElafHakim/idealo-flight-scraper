@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Scrapy
+.scrapy/
+
+# Playwright
+playwright/.cache/
+
+# Crawling output (optional)
+*.csv
+*.json
+
+# MongoDB data
+mongo_data/
+
+# Generated preprocessing files
+preprocessing/iata_validation_status.txt
