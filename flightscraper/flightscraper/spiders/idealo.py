@@ -40,19 +40,20 @@ class IdealoSpider(scrapy.Spider):
         "RETRY_TIMES": 1,
         "PLAYWRIGHT_ABORT_REQUEST": PLAYWRIGHT_ABORT_REQUEST,
     }
-    DEPARTURE_START = date(2026, 6, 22)
-    DEPARTURE_END = date(2026, 6, 28)
+    DEPARTURE_START = date(2026, 10, 12)
+    DEPARTURE_END = date(2026, 10, 18)  # 7 Tage Abflugzeitraum
     WEEKDAYS_DE = ["Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So."]# WEEKDAYS_DE ist ein Klassenattribut
     #TARGET_DEPARTURE_DATE = "2026-06-06"
     #OUTBOUND_DATE = "06.06.2026"
-    FLIGHT_CLASS_NAME = "economy"
-    COMFORT_CLASS = "1"
-    def __init__(self, batch_start=0, limit=1000, status_file=None, *args, **kwargs):
+    FLIGHT_CLASS_NAME = "business" # erster Crawler-Lauf für Economy-Class, später Business-Class 
+    COMFORT_CLASS = "2" # 2 for business, 1 for economy
+
+    def __init__(self, batch_start=0, limit=1, status_file=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.batch_start = int(batch_start)
         self.limit = int(limit)
         self.status_file = status_file or f"batch.txt"
-    #Die 7 Abflugtage vom 22.06 bis 28.06 erzeugen und in die Formate umwandeln, die Idealo benötigt
+    # 7 Abflugtage vom 22.06 bis 28.06 erzeugen und in die Formate umwandeln, die Idealo benötigt
     def iter_departure_dates(self):
         d = self.DEPARTURE_START
         while d <= self.DEPARTURE_END:
@@ -72,7 +73,8 @@ class IdealoSpider(scrapy.Spider):
     # -------------------------
     def start_requests(self):
 
-        routes = self.load_routes("flight_routes.csv")
+        #routes = self.load_routes("flight_routes.csv")
+        routes = self.load_routes("data/naechster_crawl_de_strecken.csv")
         routes = routes[self.batch_start:self.batch_start + self.limit]
         blacklisted_iata = self.load_blacklisted_iata()
 
@@ -110,7 +112,7 @@ class IdealoSpider(scrapy.Spider):
                         "children": "0",
                         "infants": "0",
                         "comfortclass": self.COMFORT_CLASS,
-                        "direct": "0",
+                        "direct": "1",# just direct flights
                         "flexdates": "0",
                         "from": route["from"],
                         "to": route["to"],
@@ -170,9 +172,9 @@ class IdealoSpider(scrapy.Spider):
 
             for row in reader:
                 routes.append({
-                    "uid": row["_id"].strip(),
-                    "from": row["from"].strip().upper(),
-                    "to": row["to"].strip().upper(),
+                    "uid": row["flugroute_id"].strip(),
+                    "from": row["abflug_iata"].strip().upper(),
+                    "to": row["ankunft_iata"].strip().upper(),
                 })
 
         return routes
@@ -323,11 +325,29 @@ class IdealoSpider(scrapy.Spider):
         try:
             offers = data.get("offers", [])
             #if offers:
+                #offer_data = offers[0].get("offer", {})#neu
                 #print(json.dumps(offers[0], indent=2, ensure_ascii=False))
+
             for offer in offers:
                 airport = offer.get("flight", {}).get("out", {}).get("airport", {})
+                # Direktflugfilter
+                out = offer.get("flight", {}).get("out", {})
+                airport = out.get("airport", {})
+                stops_airports = out.get("stops_airports", [])
+
+                 # Nur exakt gewünschte Route
+                if (
+                    airport.get("start_code") != route["from"]
+                    or airport.get("arrival_code") != route["to"]
+                ):
+                    continue
+                # Nur Direktflüge
+                if len(stops_airports) != 0:
+                    continue
+
                 if airport.get("start_date") != self.target_departure_date(departure_date):  
                     continue
+
                 item = self.extract_flight_data(offer, response.url, route)
                 key = self.build_unique_flight_key(offer, item)
 
@@ -382,33 +402,38 @@ class IdealoSpider(scrapy.Spider):
         airlines = out.get("airlines", [])
         offer_data = offer.get("offer", {})
         hand = offer_data.get("handBaggage", {})
-        stops_airports = out.get("stops_airports", [])
+        #stops_airports = out.get("stops_airports", [])
         item["crawled_at"] = datetime.now(timezone.utc).isoformat()
         item["price"] = offer.get("offer", {}).get("total_price") or ""
         #item["airline_name"] = airlines[0].get("name") if airlines else ""
         #item["airline_id"] = airlines[0].get("code") if airlines else ""
         #item["flight_number"] = airlines[0].get("flight_number") if airlines else ""
         item["airline_name"] = ",".join(a.get("name", "") for a in airlines)
-        item["airline_id"] = ",".join(a.get("code", "") for a in airlines)
-        item["flight_number"] = ",".join(a.get("flight_number", "") for a in airlines)
-        item["duration"] = airport.get("duration", "")
+        item["airline_iata"] = ",".join(a.get("code", "") for a in airlines)
+        #item["airline_id"] = ",".join(a.get("code", "") for a in airlines)
+        #item["flight_number"] = ",".join(a.get("flight_number", "") for a in airlines)
+        item["duration"] = airport.get("flightduration", "")
+        stops_airports = out.get("stops_airports", [])
         item["stops"] = len(stops_airports)
-        item["stop_airports"] = ",".join(s.get("code", "")for s in stops_airports)
+        #item["stop_airports"] = ",".join(s.get("code", "")for s in stops_airports)
         departure_time = airport.get("start_time", "")
         departure_date = airport.get("start_date", "")
         item["departure"] = f"{departure_date}T{departure_time}:00"
         arrival_time = airport.get("arrival_time")
         arrival_date = airport.get("arrival_date")
         item["arrival"] = f"{arrival_date}T{arrival_time}:00"
-        item["from_str"] = airport.get("start_code", route["from"])
-        item["to_str"] = airport.get("arrival_code", route["to"])
+        item["from_iata"] = airport.get("start_code", route["from"])
+        item["to_iata"] = airport.get("arrival_code", route["to"])
         item["flight_route_id"] = route["uid"]
         item["flight_class"] = self.FLIGHT_CLASS_NAME
         item["checked_baggage_included"] = offer_data.get("baggage_included")
         item["carry_on_baggage_included"] = hand.get("included")
-        item["carry_on_baggage_weight"] = hand.get("weight")
-        item["carry_on_baggage_size"] = hand.get("size")
-        item["personal_item_included"] = "unknown"
+        item["additional_baggage"] = offer_data.get("additional_baggage")
+        item["baggage_info_text"] = offer_data.get("baggage_info_text")
+        #item["carry_on_baggage_weight"] = hand.get("weight")
+        #item["carry_on_baggage_size"] = hand.get("size")
+        item["personal_item_included"] = offer_data.get("personal_item_included")
+        item["remaining_seats"] = offer_data.get("remaining_seats")
 
         return item
 
@@ -419,19 +444,19 @@ class IdealoSpider(scrapy.Spider):
         out = offer.get("flight", {}).get("out", {})
         flightsteps = out.get("flightsteps", "")
 
-        flight_numbers = tuple(
-            airline.get("flight_number", "")
-            for airline in out.get("airlines", [])
-        )
+        #flight_numbers = tuple(
+            #airline.get("flight_number", "")
+            #for airline in out.get("airlines", [])
+        #)
 
         return (
-            item["from_str"],
-            item["to_str"],
+            item["from_iata"],
+            item["to_iata"],
             item["departure"],
             #item["departure_time"],
             item["duration"],
             flightsteps,
-            flight_numbers,
+            #flight_numbers,
         )
 
     # -------------------------
@@ -645,7 +670,7 @@ class IdealoSpider(scrapy.Spider):
         return set(queued_ids)
     
     def load_blacklisted_iata(self):
-        path = Path("blacklisted_iata_for_idealo.txt")
+        path = Path("preprocessing/blacklisted_iata_for_idealo.txt")
 
         if not path.exists():
             return set()
