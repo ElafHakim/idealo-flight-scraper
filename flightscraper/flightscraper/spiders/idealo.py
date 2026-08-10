@@ -373,10 +373,10 @@ class IdealoSpider(scrapy.Spider):
         # item["airline_name"] = airlines[0].get("name") if airlines else ""
         # item["airline_id"] = airlines[0].get("code") if airlines else ""
         # item["flight_number"] = airlines[0].get("flight_number") if airlines else ""
-        item["airline_name"] = ",".join(a.get("name", "") for a in airlines)
-        item["airline_iata"] = ",".join(a.get("code", "") for a in airlines)
-        # item["airline_id"] = ",".join(a.get("code", "") for a in airlines)
-        # item["flight_number"] = ",".join(a.get("flight_number", "") for a in airlines)
+        item["airline_name"] = ",".join(airline.get("name", "") for airline in airlines)
+        item["airline_iata"] = ",".join(airline.get("code", "") for airline in airlines)
+        # item["airline_id"] = ",".join(airline.get("code", "") for airline in airlines)
+        # item["flight_number"] = ",".join(airline.get("flight_number", "") for airline in airlines)
         item["duration"] = airport.get("flightduration", "")
         stops_airports = out.get("stops_airports", [])
         item["stops"] = len(stops_airports)
