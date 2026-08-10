@@ -11,9 +11,9 @@ Für die Verarbeitung einer größeren Anzahl von Flugrouten steht zusätzlich e
 
 ## Requirements
 
--Python 3.12
- -Docker
-- Docker Compose
+-Python
+-Scrapy
+-Playwright
 
 ## Setup
 
@@ -30,13 +30,13 @@ cd flight_scraper/flightscraper
 ```
 
 
-Die benötigten Python-Pakete aus der `requirements.txt` installieren:
+Python-Pakete aus der `requirements.txt` installieren:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-Anschließend Chromium für Playwright installieren:
+Chromium für Playwright installieren:
 
 ```bash
 python -m playwright install chromium
@@ -142,15 +142,6 @@ Alternativ kann `mongosh` direkt innerhalb des MongoDB-Containers gestartet werd
 docker exec -it idealo-mongodb mongosh
 ```
 
-### Collection leeren
-
-Falls alle bereits gespeicherten Flugangebote im Collection `idealo_new` gelöscht werden sollen:
-
-```javascript
-use web_mining
-db.idealo_new.deleteMany({})
-```
-
 ## Laufende Python-Prozesse prüfen/stoppen
 
 Batch-Runner startet python-Prozesse
@@ -163,4 +154,9 @@ Python-Prozess beenden über seine Process-ID
 
 ```powershell
 Stop-Process -Id <PROCESS_ID>
+```
+alle Prozesse beenden
+
+```powershell
+Stop-Process -Name python -Force
 ```
