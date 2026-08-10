@@ -48,12 +48,8 @@ class IdealoSpider(scrapy.Spider):
         "Fr.",
         "Sa.",
         "So.",
-    ]  # WEEKDAYS_DE ist ein Klassenattribut
-    # TARGET_DEPARTURE_DATE = "2026-06-06"
-    # OUTBOUND_DATE = "06.06.2026"
-    FLIGHT_CLASS_NAME = (
-        "business"  # erster Crawler-Lauf für Economy-Class, später Business-Class
-    )
+    ] 
+    FLIGHT_CLASS_NAME = ( "business" ) 
     COMFORT_CLASS = "2"  # 2 for business, 1 for economy
 
     def __init__(self, batch_start=0, limit=1, status_file=None, *args, **kwargs):
@@ -63,7 +59,7 @@ class IdealoSpider(scrapy.Spider):
         self.status_file = status_file or f"batch.txt"
         self.status_handler = StatusHandler(self.status_file)
 
-    # 7 Abflugtage vom 22.06 bis 28.06 erzeugen und in die Formate umwandeln, die Idealo benötigt
+    # Abflugtage erzeugen und in die Formate umwandeln, die Idealo benötigt
     def iter_departure_dates(self):
         d = self.DEPARTURE_START
         while d <= self.DEPARTURE_END:
@@ -82,9 +78,6 @@ class IdealoSpider(scrapy.Spider):
     def target_departure_date(self, d):
         return d.strftime("%Y-%m-%d")
 
-    # -------------------------
-    # START search requests
-    # -------------------------
     def start_requests(self):
 
         # routes = self.load_routes("flight_routes.csv")
@@ -120,7 +113,7 @@ class IdealoSpider(scrapy.Spider):
                     )
                     continue
 
-                # die Route wurde aus flight_routes.csv gelesen und für sie eine HTTP-POST-Request(Playwright-Request) an Scrapy übergeben
+                # Route aus flight_routes.csv gelesen und für sie eine HTTP-POST-Request(Playwright-Request) an Scrapy übergeben
                 self.status_handler.mark_route_status(route, departure_date, "queued")
                 yield scrapy.FormRequest(  # Flugsuche über das API Call search.php?action=search
                     #   intern passiert await page.goto("https://flug.idealo.de/search.php?action=search")
@@ -181,9 +174,6 @@ class IdealoSpider(scrapy.Spider):
             "user-agent": self.get_user_agent(),
         }
 
-    # -------------------------
-    # CSV LADEN
-    # -------------------------
     def load_routes(self, csv_path):
         routes = []
 
@@ -198,10 +188,9 @@ class IdealoSpider(scrapy.Spider):
                         "to": row["ankunft_iata"].strip().upper(),
                     }
                 )
-
         return routes
 
-    # wird aufgerufen wenn die Suchseite von Idealo geladen wurde und Responnse zurück ist
+    # wird aufgerufen wenn die Suchseite von Idealo geladen und Responnse zurück ist
     async def parse_search_response(
         self,
         response,
@@ -213,8 +202,8 @@ class IdealoSpider(scrapy.Spider):
 
         self.status_handler.mark_route_status(
             route, departure_date, "response_received"
-        )  # Die Idealo-Suchseite wurde geladen.
-        page = response.meta["playwright_page"]  #  auf das Browser-Objekt greifen
+        )  # Idealo-Suchseite wurde geladen.
+        page = response.meta["playwright_page"]  #  auf Browser-Objekt greifen
 
         try:  #   try finally sollte den playwright schritt schützen
             if response.status == 503:
@@ -269,8 +258,7 @@ class IdealoSpider(scrapy.Spider):
                     search_id = search_ids[0]
                     break
 
-        if not search_id:
-            # Resourcen wurde gelesen, aber Idealo hat keine searchid geliefert
+        if not search_id:       # Resourcen wurde gelesen, aber Idealo hat keine searchid geliefert
             self.status_handler.mark_route_status(
                 route, departure_date, "no_searchid_found"
             )
@@ -286,9 +274,6 @@ class IdealoSpider(scrapy.Spider):
         ):
             yield request
 
-    # -------------------------
-    # API START
-    # -------------------------
     def start_api_request(
         self, route, departure_date, seen_last, seen_keys, tiny_id, search_id
     ):
@@ -302,7 +287,6 @@ class IdealoSpider(scrapy.Spider):
             "outboundAirportStartCode": route["from"],
             "outboundAirportArrivalCode": route["to"],
             "outboundDate": self.idealo_outbound_date(departure_date),
-            # "outboundDate": self.OUTBOUND_DATE,
             "personCount": "1",
             "adults": "1",
             "infants": "0",
@@ -326,10 +310,6 @@ class IdealoSpider(scrapy.Spider):
             },
             dont_filter=True,
         )
-
-    # -------------------------
-    # HEADERS
-    # -------------------------
 
     def api_headers(self, tiny_id):
         return {
@@ -355,10 +335,7 @@ class IdealoSpider(scrapy.Spider):
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/147.0.0.0 Safari/537.36"
         )
-
-    # -------------------------
     # parst die API JSON RESPONSE von getResults.php, extrahiert Flugangebote, behandelt Pagination, setzt am Ende completed
-    # -------------------------
     def parse_api(
         self,
         response,
@@ -370,14 +347,14 @@ class IdealoSpider(scrapy.Spider):
     ):
         # if response.status in [403, 429, 503]:
         try:
-            data = response.json()  # JSON Antwort kommt von der API getResults.php
+            data = response.json()
         except Exception as e:
             self.logger.error(
                 f"JSON ERROR | Route {route['uid']} | {route['from']} -> {route['to']} | {e}"
             )
             self.status_handler.mark_route_status(
                 route, departure_date, "json_error"
-            )  #    API-Antwort war kein gültiges JSON
+            )
             return
 
         try:
@@ -393,13 +370,12 @@ class IdealoSpider(scrapy.Spider):
                 airport = out.get("airport", {})
                 stops_airports = out.get("stops_airports", [])
 
-                # Nur exakt gewünschte Route
-                if (
+                if ( # Nur exakt gewünschte Route
                     airport.get("start_code") != route["from"]
                     or airport.get("arrival_code") != route["to"]
                 ):
                     continue
-                # Nur Direktflüge
+    
                 if len(stops_airports) != 0:
                     continue
 
@@ -464,9 +440,6 @@ class IdealoSpider(scrapy.Spider):
             )  # Fehler beim Verarbeiten der gültigen JSON-RESPONSE_Daten
             return
 
-    # -------------------------
-    # ITEM
-    # -------------------------
     def extract_flight_data(self, offer, url, route):
         item = FlightscraperItem()
         out = offer.get("flight", {}).get("out", {})
@@ -509,9 +482,6 @@ class IdealoSpider(scrapy.Spider):
 
         return item
 
-    # -------------------------
-    # KEY
-    # -------------------------
     def build_unique_flight_key(self, offer, item):
         out = offer.get("flight", {}).get("out", {})
         flightsteps = out.get("flightsteps", "")
@@ -531,9 +501,6 @@ class IdealoSpider(scrapy.Spider):
             # flight_numbers,
         )
 
-    # -------------------------
-    # UTILS
-    # -------------------------
     def replace_query_param(self, url, key, value):
         parsed = urlparse(url)
         query = parse_qs(parsed.query)
