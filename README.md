@@ -42,27 +42,25 @@ Anschließend Chromium für Playwright installieren:
 python -m playwright install chromium
 ```
 
-## Hint to start MongoDB
+## MongoDB starten
 
-MongoDB wird über Docker bereitgestellt.
+Docker Desktop  starten
 
-```bash
+```powershell
+Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+```
+
+MongoDB-Container starten
+
+```powershell
 docker compose up -d
 ```
 
-Prüfen, ob der MongoDB-Container läuft:
+Prüfen, ob der Container läuft:
 
-```bash
+```powershell
 docker ps
 ```
-
-MongoDB ist anschließend über folgenden Port erreichbar:
-
-```text
-localhost:27017
-```
-
-Die MongoDB-Daten werden über ein Docker-Volume persistent gespeichert.
 
 ## Scraper starten
 
@@ -73,6 +71,7 @@ python -m scrapy crawl idealo
 ```
 
 Der Spider liest die konfigurierten Flugrouten ein, sendet die entsprechenden Anfragen und verarbeitet die gefundenen Flugangebote.
+
 
 ## Batch-Crawl starten
 
@@ -98,51 +97,6 @@ Die Status- und Logdateien landen in das Verzeichnis:
 batches/
 ```
 
-## Laufende Python-Prozesse prüfen
-
-Da der Batch-Runner Scrapy-Prozesse startet, können laufende Python-Prozesse unter Windows PowerShell mit folgendem Befehl geprüft werden:
-
-```powershell
-Get-Process python
-```
-
-Die Ausgabe enthält unter anderem die jeweilige Process-ID (`Id`).
-
-## Python-Prozess beenden
-
-Ein bestimmter Python-Prozess kann über seine Process-ID beendet werden:
-
-```powershell
-Stop-Process -Id <PROCESS_ID>
-```
-
-Beispiel:
-
-```powershell
-Stop-Process -Id 9932
-```
-
-Anschließend kann geprüft werden, ob noch Python-Prozesse laufen:
-
-```powershell
-Get-Process python
-```
-
-## MongoDB
-
-MongoDB wird über Docker gestartet:
-
-```powershell
-docker compose up -d
-```
-
-Prüfen, ob der Container läuft:
-
-```powershell
-docker ps
-```
-
-Die MongoDB ist über Port `27017` erreichbar.
 
 ### Datenbank mit mongosh prüfen
 
@@ -195,4 +149,34 @@ Falls alle bereits gespeicherten Flugangebote im Collection `idealo_new` gelösc
 ```javascript
 use web_mining
 db.idealo_new.deleteMany({})
+```
+
+## Laufende Python-Prozesse prüfen
+
+Da der Batch-Runner Scrapy-Prozesse startet, können laufende Python-Prozesse unter Windows PowerShell mit folgendem Befehl geprüft werden:
+
+```powershell
+Get-Process python
+```
+
+Die Ausgabe enthält unter anderem die jeweilige Process-ID (`Id`).
+
+## Python-Prozess beenden
+
+Ein bestimmter Python-Prozess kann über seine Process-ID beendet werden:
+
+```powershell
+Stop-Process -Id <PROCESS_ID>
+```
+
+Beispiel:
+
+```powershell
+Stop-Process -Id 9932
+```
+
+Anschließend kann geprüft werden, ob noch Python-Prozesse laufen:
+
+```powershell
+Get-Process python
 ```
