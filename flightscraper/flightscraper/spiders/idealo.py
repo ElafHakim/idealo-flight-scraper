@@ -1,18 +1,13 @@
 import csv
 import time
-import random
 import scrapy
 import asyncio
-import json
 from scrapy_playwright.page import PageMethod
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
 from flightscraper.items import FlightscraperItem
 from datetime import date, timedelta, datetime, timezone
-
-# from statistics import mean
-from flightscraper.flightscraper.utils.status_handler import StatusHandler
-
+from flightscraper.utils.status_handler import StatusHandler
 
 class IdealoSpider(scrapy.Spider):
     name = "idealo"
@@ -566,7 +561,7 @@ class IdealoSpider(scrapy.Spider):
             f"{route['from']} -> {route['to']} | "
             f"{failure.value}"
         )
-        self.mark_route_status(route, departure_date, "api_error")
+        self.status_handler.mark_route_status(route, departure_date, "api_error")
 
     async def handle_search_error(self, failure):
         route = failure.request.cb_kwargs["route"]
@@ -590,22 +585,22 @@ class IdealoSpider(scrapy.Spider):
             "Timeout" in error_text
         ):  # error_text enthält Page.goto: Timeout 30000ms exceeded. ....
             # Playwright konnte im Moment die Suchseite nicht rechtzeitig laden, später kann es funktioneiren
-            self.mark_route_status(route, departure_date, "Playwright_Timeout")
+            self.status_handler.mark_route_status(route, departure_date, "Playwright_Timeout")
             return
 
         if "Page crashed" in error_text:
-            self.mark_route_status(route, departure_date, "page_crashed")
+            self.status_handler.mark_route_status(route, departure_date, "page_crashed")
             return
 
         if "Connection closed" in error_text:
-            self.mark_route_status(route, departure_date, "connection_closed")
+            self.status_handler.mark_route_status(route, departure_date, "connection_closed")
             return
         # Playwright wollte neuen Browser-Tab/Page erzeugen, aber Chromium/der Driver war gerade instabil oder schon teilweise geschlossen.
         if "Target.createTarget" in error_text:
-            self.mark_route_status(route, departure_date, "target_create_target")
+            self.status_handler.mark_route_status(route, departure_date, "target_create_target")
             return
         # else
-        self.mark_route_status(route, departure_date, "search_error")
+        self.status_handler.mark_route_status(route, departure_date, "search_error")
 
     def load_blacklisted_iata(self):
         path = Path("preprocessing/blacklisted_iata_for_idealo.txt")
