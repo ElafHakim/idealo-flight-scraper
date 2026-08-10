@@ -151,32 +151,16 @@ use web_mining
 db.idealo_new.deleteMany({})
 ```
 
-## Laufende Python-Prozesse prüfen
+## Laufende Python-Prozesse prüfen/stoppen
 
-Da der Batch-Runner Scrapy-Prozesse startet, können laufende Python-Prozesse unter Windows PowerShell mit folgendem Befehl geprüft werden:
+Batch-Runner startet python-Prozesse
 
 ```powershell
 Get-Process python
 ```
 
-Die Ausgabe enthält unter anderem die jeweilige Process-ID (`Id`).
-
-## Python-Prozess beenden
-
-Ein bestimmter Python-Prozess kann über seine Process-ID beendet werden:
+Python-Prozess beenden über seine Process-ID 
 
 ```powershell
 Stop-Process -Id <PROCESS_ID>
-```
-
-Beispiel:
-
-```powershell
-Stop-Process -Id 9932
-```
-
-Anschließend kann geprüft werden, ob noch Python-Prozesse laufen:
-
-```powershell
-Get-Process python
 ```
