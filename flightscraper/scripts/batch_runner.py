@@ -8,7 +8,6 @@ env = os.environ.copy()
 
 CSV_FILE = "data/naechster_crawl_de_strecken.csv"
 BATCH_SIZE = 200
-PAUSE_SECONDS = 5
 ZERO_LIMIT = 4  #  wenn die Meldung  0 pages/min 4 mal hintereinander kommt
 DAYS_PER_ROUTE = 7
 BATCH_DIR = Path("batches")
@@ -141,15 +140,20 @@ for start in range(START_INDEX, total_routes, BATCH_SIZE):
             attempt += 1
             continue
 
+        # Verify batch completion before continuing
+        if not batch_is_finished(statusfile, expected_count):
+            print(
+                f"Batch {start + 1}-{batch_end} ist noch nicht vollständig. "
+                f"Wird wiederholt."
+            )
+            attempt += 1
+            continue
+
         print(f"Batch fertig: {start + 1} bis {batch_end}")
         break
 
     if attempt > MAX_RETRIES_PER_BATCH:
         print(f"Batch {start + 1}-{batch_end} nach {MAX_RETRIES_PER_BATCH} Versuchen nicht fertig.")
         break
-
-    #if batch_end < total_routes:
-        #print(f"Pause {PAUSE_SECONDS} Sekunden...")
-        #time.sleep(PAUSE_SECONDS)
 
 print("Alle Batches fertig.")
