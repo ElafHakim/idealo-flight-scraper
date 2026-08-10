@@ -25,7 +25,6 @@ SCRAPEOPS_NUM_RESULTS = 100
 
 MDB_CONNECTION_STRING = 'mongodb://localhost:27017/?directConnection=true'
 CRAWL_DATE='2026-04-09'
-ROTATING_PROXY_LIST_PATH = './proxies.txt'
 
 #FEEDS = {
 #    'flights.json': {'format': 'json', 'overwrite': True}

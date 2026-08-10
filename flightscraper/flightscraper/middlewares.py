@@ -204,26 +204,3 @@ class ScrapeOpsFakeBrowserHeaderAgentMiddleware:
         request.headers['accept'] = random_browser_header.get('accept') 
         request.headers['user-agent'] = random_browser_header.get('user-agent') 
         request.headers['upgrade-insecure-requests'] = random_browser_header.get('upgrade-insecure-requests')
-
-import random
-import requests
-
-class DynamicProxyMiddleware:
-
-    def __init__(self):
-        self.proxies = []
-        self.refresh_proxies()
-
-    def refresh_proxies(self):
-        url = "https://proxylist.geonode.com/api/proxy-list?filterUpTime=100&limit=500&page=1&sort_by=lastChecked&sort_type=desc"
-        data = requests.get(url).json()
-        self.proxies = [
-            f"http://{p['ip']}:{p['port']}" for p in data["data"]
-        ]
-
-    def process_request(self, request, spider):
-        if not self.proxies:
-            self.refresh_proxies()
-
-        proxy = random.choice(self.proxies)
-        request.meta["proxy"] = proxy
