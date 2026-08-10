@@ -40,15 +40,7 @@ class IdealoSpider(scrapy.Spider):
     }
     DEPARTURE_START = date(2026, 10, 12)
     DEPARTURE_END = date(2026, 10, 18)  # 7 Tage Abflugzeitraum
-    WEEKDAYS_DE = [
-        "Mo.",
-        "Di.",
-        "Mi.",
-        "Do.",
-        "Fr.",
-        "Sa.",
-        "So.",
-    ] 
+    WEEKDAYS_DE = ["Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So."] 
     FLIGHT_CLASS_NAME = ( "business" ) 
     COMFORT_CLASS = "2"  # 2 for business, 1 for economy
 
@@ -66,7 +58,7 @@ class IdealoSpider(scrapy.Spider):
             yield d  # Gib ein Datum zurück und merke dir die aktuelle Position. Beim nächsten Aufruf geht es mit dem nächsten Tag weiter.
             d += timedelta(days=1)
 
-    # Idealo erwartet im Suchformular diese Form Mo. 22.06.26
+    # Idealo erwartet im Suchformular diese spezifische Form Mo. dd.mm.yy
     def idealo_go_date(self, d):
         return f"{self.WEEKDAYS_DE[d.weekday()]} {d:%d.%m.%y}"
 
@@ -84,40 +76,25 @@ class IdealoSpider(scrapy.Spider):
         routes = self.load_routes("data/naechster_crawl_de_strecken.csv")
         routes = routes[self.batch_start : self.batch_start + self.limit]
         blacklisted_iata = self.load_blacklisted_iata()
-
-        # 1. Erst alte queued-Routen markieren
-        # Wenn Route vorher bei queued hängen blieb,dann makeire sie problematic um beim nächsten Lauf zu skippen
-        # queued_ids = self.load_first_queued_routes(limit=12)
-        # for route in routes:
-        # if route["uid"] in queued_ids:
-        # self.mark_route_status(route, departure_date, "problematic")
-
-        # 2. Dann normale Verarbeitung starten
         completed_keys = self.status_handler.load_completed_routes()
-        # problematic_ids = self.load_problematic_routes()
-        # no_searchid_found_ids = self.load_no_searchid_fount_routes()
-        # service_unavailable_ids = self.load_service_unavailable_routes()
-
+       
         for route in routes:
             for departure_date in self.iter_departure_dates():
                 if (route["uid"], departure_date.isoformat()) in completed_keys:
                     continue
+
                 if route["from"] == route["to"]:
-                    self.status_handler.mark_route_status(
-                        route, departure_date, "same_iata"
-                    )
-                    continue
-                if route["from"] in blacklisted_iata or route["to"] in blacklisted_iata:
-                    self.status_handler.mark_route_status(
-                        route, departure_date, "blacklisted_iata"
-                    )
+                    self.status_handler.mark_route_status(route, departure_date, "same_iata")
                     continue
 
-                # Route aus flight_routes.csv gelesen und für sie eine HTTP-POST-Request(Playwright-Request) an Scrapy übergeben
+                if route["from"] in blacklisted_iata or route["to"] in blacklisted_iata:
+                    self.status_handler.mark_route_status(route, departure_date, "blacklisted_iata")
+                    continue
+
                 self.status_handler.mark_route_status(route, departure_date, "queued")
-                yield scrapy.FormRequest(  # Flugsuche über das API Call search.php?action=search
-                    #   intern passiert await page.goto("https://flug.idealo.de/search.php?action=search")
-                    url="https://flug.idealo.de/search.php?action=search",  #
+                # Route aus csv gelesen und für sie eine HTTP-POST-Request(Playwright-Request) an Scrapy übergeben
+                yield scrapy.FormRequest(  #   intern passiert await page.goto("https://flug.idealo.de/search.php?action=search")
+                    url="https://flug.idealo.de/search.php?action=search",  # Flugsuche über das API Call search.php?action=search
                     formdata={
                         "adults": "1",
                         "children": "0",
@@ -130,7 +107,6 @@ class IdealoSpider(scrapy.Spider):
                         "from_short": route["from"],
                         "to_short": route["to"],
                         "go_date": self.idealo_go_date(departure_date),
-                        # "go_date": "Sa. 06.06.26",
                         "type": "oneway",
                         "form_type": "simple",
                     },
@@ -191,25 +167,13 @@ class IdealoSpider(scrapy.Spider):
         return routes
 
     # wird aufgerufen wenn die Suchseite von Idealo geladen und Responnse zurück ist
-    async def parse_search_response(
-        self,
-        response,
-        route,
-        departure_date,
-        seen_last,
-        seen_keys,
-    ):
-
-        self.status_handler.mark_route_status(
-            route, departure_date, "response_received"
-        )  # Idealo-Suchseite wurde geladen.
+    async def parse_search_response(self, response, route, departure_date, seen_last, seen_keys):
+        self.status_handler.mark_route_status(route, departure_date, "response_received")  # Idealo-Suchseite wurde geladen.
         page = response.meta["playwright_page"]  #  auf Browser-Objekt greifen
 
         try:  #   try finally sollte den playwright schritt schützen
             if response.status == 503:
-                self.status_handler.mark_route_status(
-                    route, departure_date, "503_service_unavailable"
-                )
+                self.status_handler.mark_route_status(route, departure_date, "503_service_unavailable")
                 return  # geh zu fininally, keine Suchergebnisse -> keine normale Suche möglich
             tiny_id = response.url.rstrip("/").split("/")[
                 -1
@@ -217,34 +181,22 @@ class IdealoSpider(scrapy.Spider):
             #   alle geladenen Netzwerk-Ressourcen auslesen, dabei werden startSearch.php, getResults.php geladen
             #   Daraus extrahiere die echte searchid, die für weitere API-Aufrufe benötigt wird.
             resource_urls = await asyncio.wait_for(
-                page.evaluate("""
-                    () => performance.getEntriesByType('resource').map(e => e.name)
-                """),
+                page.evaluate(""" () => performance.getEntriesByType('resource').map(e => e.name) """),
                 timeout=10,
             )
         except Exception as e:
-            self.logger.error(
-                f"PLAYWRIGHT PARSE ERROR | Route {route['uid']} | "
-                f"{route['from']} -> {route['to']} | {e}"
-            )
+            self.logger.error(f"PLAYWRIGHT PARSE ERROR | Route {route['uid']} | {route['from']} -> {route['to']} | {e}")
             # Playwright konnte die geladenenen Browser-Ressourcen nicht lesen
-            self.status_handler.mark_route_status(
-                route, departure_date, "resource_extraction_error"
-            )
+            self.status_handler.mark_route_status(route, departure_date, "resource_extraction_error")
             return
 
         finally:
-            try:  # Bei erfolgreichem Ablauf die Seite(playwright-page) schließen
-                await asyncio.wait_for(
-                    page.close(), timeout=5
-                )  # einzelne Playwright-Browser-Tab schließen
-
+            try:  # Bei erfolgreichem Ablauf das playwright-page (Playwright-Browser-Tab) schließen
+                await asyncio.wait_for( page.close(), timeout=5 )
             except (
                 Exception
-            ) as e:  # falls Playwright beim Schließen der Page ein Problem hatt dann
-                self.status_handler.mark_route_status(
-                    route, departure_date, "page_not_closed"
-                )
+            ) as e:  # falls Playwright beim Schließen der Page ein Problem hat dann
+                self.status_handler.mark_route_status(route, departure_date, "page_not_closed")
 
         search_id = None
         #  Nachdem die Suchseite geladen wurde, alle vom Browser geladenen Ressourcen auslesen
@@ -259,9 +211,7 @@ class IdealoSpider(scrapy.Spider):
                     break
 
         if not search_id:       # Resourcen wurde gelesen, aber Idealo hat keine searchid geliefert
-            self.status_handler.mark_route_status(
-                route, departure_date, "no_searchid_found"
-            )
+            self.status_handler.mark_route_status(route, departure_date, "no_searchid_found")
             return
 
         for request in self.start_api_request(
@@ -274,10 +224,7 @@ class IdealoSpider(scrapy.Spider):
         ):
             yield request
 
-    def start_api_request(
-        self, route, departure_date, seen_last, seen_keys, tiny_id, search_id
-    ):
-
+    def start_api_request(self, route, departure_date, seen_last, seen_keys, tiny_id, search_id):
         params = {
             "searchid": search_id,
             "tinyId": tiny_id,
@@ -335,26 +282,14 @@ class IdealoSpider(scrapy.Spider):
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/147.0.0.0 Safari/537.36"
         )
+    
     # parst die API JSON RESPONSE von getResults.php, extrahiert Flugangebote, behandelt Pagination, setzt am Ende completed
-    def parse_api(
-        self,
-        response,
-        route,
-        departure_date,
-        seen_last,
-        seen_keys,
-        tiny_id,
-    ):
-        # if response.status in [403, 429, 503]:
+    def parse_api(self, response, route, departure_date, seen_last, seen_keys, tiny_id):
         try:
             data = response.json()
         except Exception as e:
-            self.logger.error(
-                f"JSON ERROR | Route {route['uid']} | {route['from']} -> {route['to']} | {e}"
-            )
-            self.status_handler.mark_route_status(
-                route, departure_date, "json_error"
-            )
+            self.logger.error(f"JSON ERROR | Route {route['uid']} | {route['from']} -> {route['to']} | {e}")
+            self.status_handler.mark_route_status(route, departure_date, "json_error")
             return
 
         try:
@@ -379,9 +314,7 @@ class IdealoSpider(scrapy.Spider):
                 if len(stops_airports) != 0:
                     continue
 
-                if airport.get("start_date") != self.target_departure_date(
-                    departure_date
-                ):
+                if airport.get("start_date") != self.target_departure_date(departure_date):
                     continue
 
                 item = self.extract_flight_data(offer, response.url, route)
@@ -400,12 +333,8 @@ class IdealoSpider(scrapy.Spider):
             if next_last and next_last not in seen_last:
                 seen_last.add(next_last)
 
-                next_url = self.replace_query_param(
-                    response.url, "last", str(next_last)
-                )
-                next_url = self.replace_query_param(
-                    next_url, "_", str(int(time.time() * 1000))
-                )
+                next_url = self.replace_query_param(response.url, "last", str(next_last))
+                next_url = self.replace_query_param(next_url, "_", str(int(time.time() * 1000)))
 
                 yield scrapy.Request(
                     url=next_url,
@@ -423,21 +352,12 @@ class IdealoSpider(scrapy.Spider):
                 )
 
             elif not next_last:  # keine offers mehr dann Route als fertig markieren
-                self.status_handler.mark_route_status(
-                    route, departure_date, "completed"
-                )
+                self.status_handler.mark_route_status(route, departure_date, "completed")
             else:  # Wenn next_last existiert, aber schon in seen_last ist, dann passiert nichts deswegen
-                self.status_handler.mark_route_status(
-                    route, departure_date, "completed"
-                )
-
+                self.status_handler.mark_route_status(route, departure_date, "completed")
         except Exception as e:
-            self.logger.error(
-                f"PARSE_API ERROR | Route {route['uid']} | {route['from']} -> {route['to']} | {e}"
-            )
-            self.status_handler.mark_route_status(
-                route, departure_date, "parse_api_error"
-            )  # Fehler beim Verarbeiten der gültigen JSON-RESPONSE_Daten
+            self.logger.error(f"PARSE_API ERROR | Route {route['uid']} | {route['from']} -> {route['to']} | {e}")
+            self.status_handler.mark_route_status(route, departure_date, "parse_api_error") # error Verarbeiten gültigen JSON-RESPONSE_Daten
             return
 
     def extract_flight_data(self, offer, url, route):
@@ -485,12 +405,8 @@ class IdealoSpider(scrapy.Spider):
     def build_unique_flight_key(self, offer, item):
         out = offer.get("flight", {}).get("out", {})
         flightsteps = out.get("flightsteps", "")
-
-        # flight_numbers = tuple(
-        # airline.get("flight_number", "")
-        # for airline in out.get("airlines", [])
-        # )
-
+        #flight_numbers = tuple(airline.get("flight_number", "") for airline in out.get("airlines", []) )
+        
         return (
             item["from_iata"],
             item["to_iata"],
@@ -523,20 +439,14 @@ class IdealoSpider(scrapy.Spider):
         route = failure.request.cb_kwargs["route"]
         departure_date = failure.request.cb_kwargs["departure_date"]
 
-        self.logger.error(
-            f"API ERROR | Route {route['uid']} | "
-            f"{route['from']} -> {route['to']} | "
-            f"{failure.value}"
-        )
+        self.logger.error( f"API ERROR | Route {route['uid']} | " f"{route['from']} -> {route['to']} | "f"{failure.value}")
         self.status_handler.mark_route_status(route, departure_date, "api_error")
 
     async def handle_search_error(self, failure):
         route = failure.request.cb_kwargs["route"]
         departure_date = failure.request.cb_kwargs["departure_date"]
         error_text = str(failure.value)
-        self.logger.error(
-            f"SEARCH ERROR | Route {route['uid']} | {route['from']} -> {route['to']} | {error_text}"
-        )
+        self.logger.error(f"SEARCH ERROR | Route {route['uid']} | {route['from']} -> {route['to']} | {error_text}")
         # page=Browser-Tab von Playwright schließen, wenn beim Laden der Suchseite ein Fehler passiert.
         page = failure.request.meta.get("playwright_page")
         if page:
@@ -544,14 +454,12 @@ class IdealoSpider(scrapy.Spider):
                 await asyncio.wait_for(
                     page.close(), timeout=5
                 )  #    playwright-page schließen
-
             except Exception:
                 pass
-        # Temporäre Playwright-/Browser-Probleme
-        if (
-            "Timeout" in error_text
-        ):  # error_text enthält Page.goto: Timeout 30000ms exceeded. ....
-            # Playwright konnte im Moment die Suchseite nicht rechtzeitig laden, später kann es funktioneiren
+        
+        if ( # Temporäre Playwright-/Browser-Probleme
+            "Timeout" in error_text # Page.goto: Timeout 30000ms exceeded. ....
+        ): # Playwright konnte im Moment die Suchseite nicht rechtzeitig laden, später kann es funktioneiren
             self.status_handler.mark_route_status(route, departure_date, "Playwright_Timeout")
             return
 
@@ -562,7 +470,7 @@ class IdealoSpider(scrapy.Spider):
         if "Connection closed" in error_text:
             self.status_handler.mark_route_status(route, departure_date, "connection_closed")
             return
-        # Playwright wollte neuen Browser-Tab/Page erzeugen, aber Chromium/der Driver war gerade instabil oder schon teilweise geschlossen.
+        # Playwright wollte neuen Browser-Tab/Page erzeugen, aber Chromium/Driver war gerade instabil oder schon teilweise geschlossen.
         if "Target.createTarget" in error_text:
             self.status_handler.mark_route_status(route, departure_date, "target_create_target")
             return
